@@ -1,0 +1,8 @@
+FROM ubuntu:25.04@sha256:27771fb7b40a58237c98e8d3e6b9ecdd9289cec69a857fccfb85ff36294dac20
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sudo python3-venv python3-pyqt5 python3-matplotlib python3-psutil \
+    ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY Ubuntu /tmp/patched
+CMD ["sleep", "infinity"]

@@ -1,6 +1,8 @@
 eSim Packaging
 ====
 
+See the [Ubuntu 25.04 installation report](Ubuntu/TASK4-REPORT.md) for fixes and reproduction steps.
+
 It contains all the documentation for packaging eSim for distribution.
 
 
