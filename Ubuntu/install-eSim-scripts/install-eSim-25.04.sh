@@ -160,68 +160,26 @@ function installKicad
 function installDependency
 {
 
-    set +e      # Temporary disable exit on error
-    trap "" ERR # Do not trap on error of any command
-
-    # Update apt repository
     echo "Updating apt index files..................."
     sudo apt-get update
-    
-    set -e      # Re-enable exit on error
-    trap error_exit ERR
-    
-    echo "Instaling virtualenv......................."
-    sudo apt install python3-virtualenv
-   
-    echo "Creating virtual environment to isolate packages "
-    virtualenv $config_dir/env
-    
-    echo "Starting the virtual env..................."
-    source $config_dir/env/bin/activate
 
-    echo "Upgrading Pip.............................."
-    pip install --upgrade pip
-    
-    echo "Installing Xterm..........................."
-    sudo apt-get install -y xterm
-    
-    echo "Installing Psutil.........................."
-    sudo apt-get install -y python3-psutil
-    
-    echo "Installing PyQt5..........................."
-    sudo apt-get install -y python3-pyqt5
+    # Use Ubuntu's mutually compatible Python/Qt packages. A default venv hides
+    # these apt-installed modules, including the declared psutil dependency.
+    sudo apt-get install -y --no-install-recommends \
+        python3-venv python3-psutil python3-pyqt5 python3-matplotlib \
+        ca-certificates xterm
+    mkdir -p "$config_dir"
+    python3 -m venv --system-site-packages "$config_dir/env"
+    source "$config_dir/env/bin/activate"
 
-    echo "Installing Matplotlib......................"
-    sudo apt-get install -y python3-matplotlib
+    # Always use the interpreter that the desktop launcher will run. The old
+    # PyPI hdlparse release uses use_2to3, removed from modern setuptools.
+    "$config_dir/env/bin/python" -m pip install \
+        watchdog makerchip-app sandpiper-saas \
+        'https://codeload.github.com/hdl/pyHDLParser/tar.gz/e1153ace8ca1e25f9fb53350c41058ef8eb8dacf'
 
-    echo "Installing Setuptools..................."
-    sudo apt-get install -y python3-setuptools
-
-    # Install NgVeri Depedencies
-    echo "Installing Pip3............................"
-    sudo apt install -y python3-pip
-
-    echo "Installing Watchdog........................"
-    pip3 install watchdog
-
-    echo "Installing Hdlparse........................"
-    pip3 install --upgrade https://github.com/hdl/pyhdlparser/tarball/master
-
-    echo "Installing Makerchip......................."
-    pip3 install makerchip-app
-
-    echo "Installing SandPiper Saas.................."
-    pip3 install sandpiper-saas
-
-   
-    echo "Installing Hdlparse......................"
-    pip3 install hdlparse
-
-    echo "Installing matplotlib................"
-    pip3 install matplotlib
-
-    echo "Installing PyQt5............."
-    pip3 install PyQt5  
+    "$config_dir/env/bin/python" -c \
+        'import psutil, matplotlib, PyQt5.QtWidgets, hdlparse.verilog_parser, watchdog'
 }
 
 
