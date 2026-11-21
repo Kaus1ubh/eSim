@@ -8,14 +8,15 @@
 
 ## Result
 
-Four defects were reproduced in the installer branch and fixed:
+Five installation problems were reproduced and fixed:
 
 1. The main installer cannot be parsed because an `if` block is not closed.
 2. The eSim virtual environment cannot import the declared `psutil` dependency installed through apt.
 3. Detecting an existing KiCad 8 installation exits the entire installer instead of continuing.
 4. The script installs KiCad 8 but puts the custom symbol table in KiCad 6's configuration directory.
+5. The bundled NGHDL installer rejects Ubuntu 25.04 and requests incompatible or undeclared build dependencies.
 
-The focused checks pass after the changes. The actual eSim 2.5 main window also opens under Ubuntu 25.04 with the patched dependency environment. This is a partial installer repair and GUI smoke test. It does not establish that NGHDL, GHDL, Ngspice, KiCad integration, or a complete circuit simulation works.
+The focused checks pass after the changes. The actual eSim 2.5 main window opens under Ubuntu 25.04 with the patched dependency environment. The bundled GHDL, Verilator, and NGHDL-modified Ngspice now build and install, and standalone digital and analog simulations pass. NGHDL co-simulation and complete eSim desktop integration have not been validated.
 
 ## Sources and environment
 
@@ -36,7 +37,7 @@ The task requires investigating eSim 2.5 on Ubuntu 25.04 and submitting changes 
 
 The archive checksum matches the one published on the official downloads page. Windows and the existing Ubuntu 26.04 WSL installation were not used as substitutes for Ubuntu 25.04. Package installation and the GUI checks ran inside the disposable Ubuntu 25.04 container as root, with separate home directories for the original and patched virtual environments. A regular desktop user's permissions and desktop session were not tested.
 
-The released archive and the installer branch have different entry scripts. The released entry script rejects Ubuntu 25.04 as unsupported. The installer branch already contains a 25.04 case and a version-specific script, but its entry script has a syntax error. The existing `Ubuntu/REPORT.md` documents earlier LLVM and Ubuntu support work by upstream contributors. Those changes are not claimed as part of this submission.
+The released archive and the installer branch have different entry scripts. The released entry script rejects Ubuntu 25.04 as unsupported. The installer branch already contains a 25.04 case and a version-specific script, but its entry script has a syntax error. The existing `Ubuntu/REPORT.md` documents earlier LLVM and Ubuntu support work by upstream contributors. Its LLVM 18 and GTK3 recommendations provided the starting point for the bundled NGHDL compatibility patch below.
 
 ## 1. Main installer stops before doing any work
 
@@ -103,6 +104,31 @@ The script's KiCad installer targets version 8, but the library function creates
 **Verification:** Create a small compressed library fixture with a symbol table and a symbol file. Run each actual function with a temporary home directory containing an existing KiCad 6 table and KiCad 8 preferences. The extraction and copy commands run normally. The original writes the table under `6.0`; the patched function writes it under `8.0`. Calling the patched cleanup twice removes the installed table, preserves the existing configuration files, and succeeds on the second call. The test uses fixture library content and does not verify the complete eSim symbol collection inside KiCad.
 
 
+## 5. Bundled NGHDL does not support Ubuntu 25.04
+
+The official eSim 2.5 archive contains a separate `nghdl.zip`. Its dispatcher supports Ubuntu 22.04, 23.04, and 24.04, then rejects 25.04 with exit code 1. Simply adding a dispatch case is insufficient: the shared installer selects Ubuntu's default LLVM rather than the LLVM version supported by bundled GHDL 4.1, and requests the unavailable GTK2 `libcanberra-gtk-module` package.
+
+**Change:** The Ubuntu 25.04 eSim installer now applies `install-eSim-scripts/nghdl-25.04.patch` immediately after extracting the bundled archive. The patch:
+
+- Adds the 25.04 case and reads version information from `/etc/os-release`.
+- Uses LLVM 18 and Clang 18, with explicit `clang++-18` selection when configuring GHDL. It leaves other installed LLVM versions in place.
+- Installs the GTK3 module and declares `xz-utils` for the bundled `.tar.xz` archives. eSim's prerequisites also include `unzip` and `patch`.
+- Allows `NGHDL_BUILD_JOBS` to cap parallel compilation without changing the default worker count.
+
+The patch modifies the extracted copy of the shared 24.04 recipe used by the new 25.04 case. Other Ubuntu versions' eSim installation paths do not apply it. It is tied to the scripts bundled with the checksum-verified eSim 2.5 release and fails if those scripts no longer match; no modified binary archive is committed.
+
+**Verification:** The compatibility patch applies without fuzz, both patched shell files pass syntax checks, and dispatch tests preserve `--install`, `--uninstall`, missing-child errors, and child failure status. A real Ubuntu 25.04 container built and installed all three bundled simulators using two build workers and a 3 GiB memory limit:
+
+| Component | Installed version | Runtime check |
+|---|---|---|
+| GHDL | 4.1.0, LLVM 18.1.8 backend, GNAT 14.2 | Bundled VHDL inverter produces the expected output for both input states |
+| Verilator | 4.210 | Generates and builds a C++ simulation of a Verilog inverter; both input states pass |
+| Ngspice | NGHDL-modified version 35 | A 10 V source and two equal resistors produce an output of 5 V |
+
+These are standalone simulator checks. They do not demonstrate the NGHDL VHDL/Ngspice co-simulation adapter or eSim's GUI integration. Build caches were reused during debugging; the recorded durations are not cold-build benchmarks.
+
+The actual eSim `installNghdl()` function was also executed with a fresh home directory and the existing compiler build cache. It extracted the original archive, applied the compatibility patch, completed installation, and returned 0. The generated NGHDL configuration and the `nghdl` and `ngspice` launcher links point to the expected source and installation paths. The standalone runtime checks passed again after this installation.
+
 ## GUI startup check
 
 The checksum-verified eSim 2.5 release was extracted into `/opt/eSim-2.5`. The script's real `createConfigFile()` function created the configuration. `tests/gui_smoke.py` then imported the release's `Application` module and constructed its actual main window using Qt's offscreen platform.
@@ -133,16 +159,23 @@ To include the real GUI check, first download the official eSim 2.5 archive, the
 ESIM_RELEASE_ZIP=/absolute/path/eSim-2.5.zip bash Ubuntu/tests/run-task4.sh
 ```
 
-The runner verifies the archive checksum before extracting it. The complete runner was executed from a fresh image build with the official archive supplied. The baseline reproduction, focused regression checks, dependency installation, and both real GUI smoke checks completed successfully. An independent check also ran only the patched dependency function in a fresh container, without running the original installer first; installation and imports passed. Logs and screenshots are kept separately as submission evidence; generated output is not tracked in this repository.
+The runner verifies the archive checksum before extracting it. Before the NGHDL integration mode was added, the baseline/dependency/GUI workflow was executed from a fresh image build with the official archive supplied. Those checks completed successfully. An independent check also ran only the patched dependency function in a fresh verifier container, without running the original installer first; installation and imports passed. The subsequent NGHDL checks used the exact eSim installation function with a fresh home directory and existing compiler build caches, as described above. Logs and screenshots are kept separately as submission evidence; generated output is not tracked in this repository.
+
+With the archive supplied, the runner also checks the NGHDL compatibility patch without compiling the tools. To enable the real eSim NGHDL installation stage and simulator runtime checks:
+
+```bash
+NGHDL_INTEGRATION=1 NGHDL_BUILD_JOBS=2 ESIM_RELEASE_ZIP=/absolute/path/eSim-2.5.zip bash Ubuntu/tests/run-task4.sh
+```
+
+This optional mode compiles the bundled tools and can take several minutes. The updated dependency function was checked separately in a fresh verifier container; its Python imports pass, and `patch` and `unzip` are available.
 
 For a desktop installation attempt, overlay `Ubuntu/install-eSim.sh` and `Ubuntu/install-eSim-scripts/` onto the extracted release folder, then run `bash install-eSim.sh --install` from that folder. The version-specific installer still performs system package installation and includes upstream removal operations. Use a disposable Ubuntu 25.04 VM for further complete-install testing.
 
 ## Remaining work and limits
 
-- The official eSim 2.5 archive's bundled `nghdl/install-nghdl.sh` supports 22.04, 23.04, and 24.04, but has no 25.04 dispatch case. On 25.04 it reaches the unsupported-version error. This is a known remaining blocker to complete installation; these eSim installer fixes do not add NGHDL support.
-- Complete installation through KiCad's PPA, NGHDL/GHDL compilation, SKY130 installation, desktop shortcut creation, and an actual circuit simulation was not attempted after these repairs.
+- The complete eSim installer has not been run through KiCad's PPA, SKY130 setup, desktop shortcut creation, and a GUI-driven circuit simulation. NGHDL's native build and the standalone simulations were checked separately.
 - The KiCad PPA addition and its exact package pin are unchanged. Ubuntu's configured repositories offered `8.0.8+dfsg-1` during the checks, but the PPA path was not validated.
-- The LLVM/GHDL issues described in upstream's existing report were not independently reproduced or repaired here.
+- Native reinstall behavior remains an upstream limitation: if `$HOME/nghdl-simulator` already exists, the bundled recipe can nest a newly extracted source directory inside it and rebuild the old directory. Native build checks used a fresh home directory; no claim of reinstall safety is made.
 - Python tools other than hdlparse remain unpinned, so future dependency resolution may change. Giving the environment access to Ubuntu packages also means their versions follow apt updates.
 - GUI checks used an offscreen Qt platform as root. Native desktop integration, non-root permissions, other Ubuntu versions, and ARM were not tested.
 - `.gitattributes` enforces LF line endings for shell scripts to keep Windows checkouts usable in Bash.

@@ -1,0 +1,93 @@
+--- a/install-nghdl.sh
++++ b/install-nghdl.sh
+@@ -22,8 +22,8 @@
+ 
+ # Function to detect Ubuntu version and full version string
+ get_ubuntu_version() {
+-    VERSION_ID=$(grep "^VERSION_ID" /etc/os-release | cut -d '"' -f 2)
+-    FULL_VERSION=$(lsb_release -d | grep -oP '\d+\.\d+\.\d+')
++    . /etc/os-release
++    FULL_VERSION=${VERSION%% *}
+     echo "Detected Ubuntu Version: $FULL_VERSION"
+ }
+ 
+@@ -46,6 +46,9 @@
+         "24.04")
+             SCRIPT="$SCRIPT_DIR/install-nghdl-24.04.sh"
+             ;;
++        "25.04")
++            SCRIPT="$SCRIPT_DIR/install-nghdl-24.04.sh"
++            ;;
+         *)
+             echo "Unsupported Ubuntu version: $VERSION_ID ($FULL_VERSION)"
+             exit 1
+--- a/install-nghdl-scripts/install-nghdl-24.04.sh
++++ b/install-nghdl-scripts/install-nghdl-24.04.sh
+@@ -22,6 +22,7 @@
+ nghdl="nghdl-simulator"
+ ghdl="ghdl-4.1.0"
+ verilator="verilator-4.210"
++llvm_version=18
+ config_dir="$HOME/.nghdl"
+ config_file="config.ini"
+ src_dir=`pwd`
+@@ -45,7 +46,7 @@
+     echo "Installing dependencies for $ghdl LLVM................"
+ 
+     echo "Installing Make..........................................."
+-    sudo apt install -y make
++    sudo apt install -y make xz-utils
+     
+     echo "Installing GNAT..........................................."
+     sudo apt install -y gnat
+@@ -53,10 +54,6 @@
+-    # It will remove older versions of llvm if any 
+-    echo "Removing older LLVM........................................"
+-    sudo apt remove -y llvm llvm-dev
+-
+     echo "Installing LLVM........................................"
+-    sudo apt install -y llvm llvm-dev
++    sudo apt install -y llvm-${llvm_version} llvm-${llvm_version}-dev
+ 
+     echo "Installing Clang.........................................."
+-    sudo apt install -y clang
++    sudo apt install -y clang-${llvm_version}
+ 
+@@ -66,6 +63,6 @@
+     # Specific dependency for canberra-gtk modules
+     echo "Installing Gtk Canberra modules..........................."
+-    sudo apt install -y libcanberra-gtk-module libcanberra-gtk3-module
++    sudo apt install -y libcanberra-gtk3-module
+ 
+     # Specific dependency for nvidia graphic cards
+     echo "Installing graphics dependency for Ngspice source build"
+@@ -102,9 +99,9 @@
+     echo "Configuring $ghdl build as per requirements"
+     chmod +x configure
+     # Other configure flags can be found at - https://github.com/ghdl/ghdl/blob/master/configure
+-    ./configure --with-llvm-config=/usr/bin/llvm-config
++    CXX="clang++-${llvm_version}" ./configure --with-llvm-config=/usr/bin/llvm-config-${llvm_version}
+     echo "Building the install file for $ghdl LLVM"
+-    make -j$(nproc)
++    make -j"${NGHDL_BUILD_JOBS:-$(nproc)}"
+     sudo make install
+ 
+     # set +e 		# Temporary disable exit on error
+@@ -133,7 +130,7 @@
+     echo "Configuring $verilator build as per requirements"
+     chmod +x configure
+     ./configure
+-    make -j$(nproc)
++    make -j"${NGHDL_BUILD_JOBS:-$(nproc)}"
+     sudo make install
+     echo "Removing the unessential verilator files........"
+     rm -r docs
+@@ -178,7 +175,7 @@
+     # Adding patch to Ngspice base code
+     # cp $src_dir/src/outitf.c $HOME/$nghdl/src/frontend
+ 
+-    make -j$(nproc)
++    make -j"${NGHDL_BUILD_JOBS:-$(nproc)}"
+     make install
+ 
+     # Make it executable

@@ -10,7 +10,7 @@ It contains the documentation to package eSim for Ubuntu OS.
 
 1. Take the `master` branch containing the source code. Rename the folder to `eSim-<version>`.
 
-2. Add the installer script `install-eSim.sh` from `installers` branch to `eSim-<version>` folder.
+2. Copy `install-eSim.sh` and the entire `install-eSim-scripts` directory from this branch into `eSim-<version>`. The Ubuntu 25.04 installer applies the included NGHDL compatibility patch after extracting `nghdl.zip`.
 
 3. Add the eSim executable (if available) in `eSim-<version>` folder. Also, remove following files from this folder:
 	- `.git` folder

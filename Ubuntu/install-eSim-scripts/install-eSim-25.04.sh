@@ -65,6 +65,7 @@ function installNghdl
     echo "Installing NGHDL..........................."
     unzip -o nghdl.zip
     cd nghdl/
+    patch --batch --forward --fuzz=0 -p1 < "$eSim_Home/install-eSim-scripts/nghdl-25.04.patch"
     chmod +x install-nghdl.sh
 
     # Do not trap on error of any command. Let NGHDL script handle its own errors.
@@ -167,7 +168,7 @@ function installDependency
     # these apt-installed modules, including the declared psutil dependency.
     sudo apt-get install -y --no-install-recommends \
         python3-venv python3-psutil python3-pyqt5 python3-matplotlib \
-        ca-certificates xterm
+        ca-certificates xterm patch unzip
     mkdir -p "$config_dir"
     python3 -m venv --system-site-packages "$config_dir/env"
     source "$config_dir/env/bin/activate"
